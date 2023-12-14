@@ -1,8 +1,11 @@
 import numpy as np
 import os
 from model import build_model
-from preprocessing.preprocessing import load_data, train_test_split
+from preprocessing import load_data, train_test_split
 from keras.utils import to_categorical
+from keras.callbacks import ModelCheckpoint, EarlyStopping
+from keras.preprocessing.image import ImageDataGenerator
+from sklearn.utils.class_weight import compute_class_weight
 
 # Define paths
 print("Current Working Directory:", os.getcwd())
@@ -14,6 +17,10 @@ test_dir = os.path.join(data_dir, 'test')
 train_images, train_labels = load_data(train_dir)
 test_images, test_labels = load_data(test_dir)
 
+# Add a channel dimension to the images (since they are grayscale)
+train_images = train_images.reshape(train_images.shape[0], 48, 48, 1)
+test_images = test_images.reshape(test_images.shape[0], 48, 48, 1)
+
 # One-hot encode labels
 num_classes = 7  # Number of emotions
 train_labels = to_categorical(train_labels, num_classes)
@@ -24,22 +31,41 @@ train_images, val_images, train_labels, val_labels = train_test_split(
     train_images, train_labels, test_size=0.2, random_state=42
 )
 
+# Assuming train_labels are one-hot encoded, convert them back to single integers for class_weight
+train_labels_single = np.argmax(train_labels, axis=1)
+
+# Calculate class weights
+class_weights = compute_class_weight('balanced', classes=np.unique(train_labels_single), y=train_labels_single)
+class_weights_dict = dict(enumerate(class_weights))
+
+# Data Augmentation (optional)
+augmentor = ImageDataGenerator(
+    rotation_range=20, zoom_range=0.15,
+    width_shift_range=0.2, height_shift_range=0.2,
+    shear_range=0.15, horizontal_flip=True,
+    fill_mode="nearest")
+
 # Build the model
 model = build_model(num_classes)
 
-# Train the model with optimized parameters
+# Model Checkpoint and Early Stopping
+checkpoint = ModelCheckpoint('emotion_model_best.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
+early_stopping = EarlyStopping(monitor='val_loss', patience=10, verbose=1, mode='min')
+
+# Train the model with optimized parameters and class weights
 batch_size = 64
-epochs = 20   
+epochs = 20
 history = model.fit(
-    train_images, train_labels,
-    batch_size=batch_size,
+    augmentor.flow(train_images, train_labels, batch_size=batch_size),
+    steps_per_epoch=len(train_images) // batch_size,
+    validation_data=(val_images, val_labels),
     epochs=epochs,
-    validation_data=(val_images, val_labels)
+    callbacks=[checkpoint, early_stopping],
+    class_weight=class_weights_dict
 )
 
-# Save the model in the new Keras format
+# Save the final model
 model.save('emotion_model.h5')
-
 
 # Evaluate the model on test data
 test_loss, test_acc = model.evaluate(test_images, test_labels)

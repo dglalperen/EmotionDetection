@@ -1,9 +1,10 @@
-import numpy as np
-from model import build_model
-from preprocessing.preprocessing import load_data, train_test_split
-from keras.utils import to_categorical
-from keras.optimizers.legacy import Adam
 import os
+from tensorflow import keras
+import keras_tuner as kt
+from model import build_model
+from preprocessing import load_data, train_test_split
+from keras.utils import to_categorical
+from keras.optimizers import Adam
 
 # Load preprocessed data
 data_dir = os.path.join(os.path.dirname(os.getcwd()), 'data')
@@ -16,40 +17,40 @@ num_classes = 7
 train_labels = to_categorical(train_labels, num_classes)
 test_labels = to_categorical(test_labels, num_classes)
 
-# Define hyperparameters to test
-batch_sizes = [32, 64]
-epochs = [10, 20]
-learning_rates = [0.001, 0.0001]
+def model_builder(hp):
+    # Define hyperparameter ranges
+    hp_learning_rate = hp.Choice('learning_rate', values=[1e-2, 1e-3, 1e-4])
 
-best_accuracy = 0
-best_params = {}
+    # Build and compile the model
+    model = build_model(num_classes)
+    model.compile(optimizer=Adam(learning_rate=hp_learning_rate),
+                  loss='categorical_crossentropy',
+                  metrics=['accuracy'])
+    return model
 
-for batch_size in batch_sizes:
-    for epoch in epochs:
-        for learning_rate in learning_rates:
-            print(f"Training with batch size={batch_size}, epochs={epoch}, learning rate={learning_rate}")
+# Initialize the tuner
+tuner = kt.Hyperband(model_builder,
+                     objective='val_accuracy',
+                     max_epochs=10,
+                     factor=3,
+                     directory='my_dir',
+                     project_name='hyperparam_opt')
 
-            # Build and compile the model
-            model = build_model(num_classes)
-            model.compile(loss='categorical_crossentropy',
-                          optimizer=Adam(learning_rate=learning_rate),
-                          metrics=['accuracy'])
+# Early stopping callback
+stop_early = keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
 
-            # Train the model
-            history = model.fit(
-                train_images, train_labels,
-                batch_size=batch_size,
-                epochs=epoch,
-                validation_data=(test_images, test_labels)
-            )
+# Execute the search
+tuner.search(train_images, train_labels, epochs=50, validation_split=0.2, callbacks=[stop_early])
 
-            # Evaluate the model
-            val_loss, val_acc = model.evaluate(test_images, test_labels)
+# Get the best hyperparameters
+best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+print(f"The optimal learning rate is {best_hps.get('learning_rate')}.")
 
-            # Update best accuracy and parameters
-            if val_acc > best_accuracy:
-                best_accuracy = val_acc
-                best_params = {'batch_size': batch_size, 'epochs': epoch, 'learning_rate': learning_rate}
+# Build the model with the optimal hyperparameters
+model = tuner.hypermodel.build(best_hps)
 
-print(f"Best Accuracy: {best_accuracy}")
-print(f"Best Parameters: {best_params}")
+# Train the model
+model.fit(train_images, train_labels, epochs=50, validation_split=0.2)
+
+# Save the model
+model.save('emotion_model_optimized.h5')
