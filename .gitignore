@@ -7,3 +7,6 @@ build/
 
 # Data
 /data/
+
+# my-dir
+/src/my_dir/
