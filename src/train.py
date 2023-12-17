@@ -6,6 +6,7 @@ from keras.utils import to_categorical
 from keras.callbacks import ModelCheckpoint, EarlyStopping
 from keras.preprocessing.image import ImageDataGenerator
 from sklearn.utils.class_weight import compute_class_weight
+from keras.optimizers.legacy import Adam
 
 # Define paths
 print("Current Working Directory:", os.getcwd())
@@ -17,12 +18,10 @@ test_dir = os.path.join(data_dir, 'test')
 train_images, train_labels = load_data(train_dir)
 test_images, test_labels = load_data(test_dir)
 
-# Add a channel dimension to the images (since they are grayscale)
+# Reshape and one-hot encode labels
 train_images = train_images.reshape(train_images.shape[0], 48, 48, 1)
 test_images = test_images.reshape(test_images.shape[0], 48, 48, 1)
-
-# One-hot encode labels
-num_classes = 7  # Number of emotions
+num_classes = 7
 train_labels = to_categorical(train_labels, num_classes)
 test_labels = to_categorical(test_labels, num_classes)
 
@@ -31,28 +30,30 @@ train_images, val_images, train_labels, val_labels = train_test_split(
     train_images, train_labels, test_size=0.2, random_state=42
 )
 
-# Assuming train_labels are one-hot encoded, convert them back to single integers for class_weight
+# Calculate class weights for imbalanced data
 train_labels_single = np.argmax(train_labels, axis=1)
-
-# Calculate class weights
 class_weights = compute_class_weight('balanced', classes=np.unique(train_labels_single), y=train_labels_single)
 class_weights_dict = dict(enumerate(class_weights))
 
-# Data Augmentation (optional)
+# Data Augmentation
 augmentor = ImageDataGenerator(
     rotation_range=20, zoom_range=0.15,
     width_shift_range=0.2, height_shift_range=0.2,
     shear_range=0.15, horizontal_flip=True,
     fill_mode="nearest")
 
-# Build the model
-model = build_model(num_classes)
+# Build the model with optimized hyperparameters
+model = build_model(num_classes=7, hp_num_units=192, hp_dropout_rate=0.4)
+
+# Compile the model with optimized learning rate
+adam_optimizer = Adam(learning_rate=0.001)
+model.compile(optimizer=adam_optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
 
 # Model Checkpoint and Early Stopping
 checkpoint = ModelCheckpoint('emotion_model_best.h5', monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 early_stopping = EarlyStopping(monitor='val_loss', patience=10, verbose=1, mode='min')
 
-# Train the model with optimized parameters and class weights
+# Train the model
 batch_size = 64
 epochs = 20
 history = model.fit(
@@ -65,7 +66,7 @@ history = model.fit(
 )
 
 # Save the final model
-model.save('emotion_model.h5')
+model.save('emotion_model_optimized.h5')
 
 # Evaluate the model on test data
 test_loss, test_acc = model.evaluate(test_images, test_labels)

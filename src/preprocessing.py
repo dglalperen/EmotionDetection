@@ -5,32 +5,43 @@ from keras.utils import to_categorical
 from sklearn.model_selection import train_test_split
 
 def load_data(directory):
+    print("Loading data from", directory)
     images = []
     labels = []
-    img_width, img_height = 48, 48  # Image dimensions as per FER-2013 dataset
+    img_width, img_height = 48, 48
 
-    for idx, emotion in enumerate(os.listdir(directory)):
-        if not os.path.isdir(os.path.join(directory, emotion)):
+    emotions = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
+    for idx, emotion in enumerate(emotions):
+        emotion_dir = os.path.join(directory, emotion.lower())
+        print(f"Loading {emotion} images from: {emotion_dir}")
+
+        if not os.path.isdir(emotion_dir):
+            print(f"Directory not found: {emotion_dir}")
             continue
 
-        for img_file in os.listdir(os.path.join(directory, emotion)):
-            img_path = os.path.join(directory, emotion, img_file)
+        for img_file in os.listdir(emotion_dir):
+            img_path = os.path.join(emotion_dir, img_file)
             try:
                 img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-                if img is not None:
-                    # Optional: Apply Histogram Equalization
-                    # img = cv2.equalizeHist(img)
-                    img = cv2.resize(img, (img_width, img_height))
-                    images.append(img)
-                    labels.append(idx)
+                if img is None:
+                    print(f"Failed to load image: {img_path}")
+                    continue
+                img = cv2.resize(img, (img_width, img_height))
+                images.append(img)
+                labels.append(idx)
             except Exception as e:
                 print(f"Error processing {img_path}: {e}")
 
-    images = np.array(images, dtype='float32')
-    images = images / 255.0  # Normalizing the images
+    if not images:
+        print("No images found. Check the dataset.")
+        return np.array([]), np.array([])
+
+    images = np.array(images, dtype='float32') / 255.0  # Normalize the images
     labels = np.array(labels, dtype='int')
 
     return images, labels
+
+
 
 def preprocess_data():
     base_dir = os.path.dirname(os.path.abspath(__file__))
