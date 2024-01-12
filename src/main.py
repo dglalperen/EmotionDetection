@@ -6,7 +6,7 @@ import time
 def main():
     try:
         # Load the trained model
-        model = load_model('./emotion_model.h5')
+        model = load_model('./emotion_model_optimized.h5')
     except IOError:
         print("Error: Failed to load the model. Check the model path.")
         return

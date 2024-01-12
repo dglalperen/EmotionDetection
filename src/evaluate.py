@@ -17,7 +17,7 @@ base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 data_dir = os.path.join(base_dir, 'data')
 test_dir = os.path.join(data_dir, 'test')
 
-model = load_model('./emotion_model.h5')
+model = load_model('./emotion_model_optimized.h5')
 test_images, test_labels = load_data(test_dir)
 test_labels = to_categorical(test_labels, num_classes)
 
